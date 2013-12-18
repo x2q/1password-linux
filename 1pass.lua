@@ -42,6 +42,12 @@ local function dumptable(tabname, tab, depth)
     end
 end
 
+local function load_json_str(str, desc)
+    local retval = JSON:decode(str)
+    dumptable("JSON " .. desc, retval)
+    return retval
+end
+
 local function load_json(fname)
     local f = io.open(fname, "rb")
     if (f == nil) then
@@ -51,9 +57,7 @@ local function load_json(fname)
     local str = f:read("*all")
     f:close()
 
-    local retval = JSON:decode(str)
-    dumptable("JSON " .. fname, retval)
-    return retval
+    return load_json_str(str, fname)
 end
 
 
@@ -107,6 +111,11 @@ local function showHint(basedir)
 end
 
 
+function loadContents(basedir)
+    return load_json(basedir .. "/contents.js");
+end
+
+
 -- Mainline!
 
 local basedir = "1Password/1Password.agilekeychain/data/default"  -- !!! FIXME
@@ -120,7 +129,18 @@ if loadKey(basedir, "SL5", password) == nil then
     os.exit(1)
 end
 
-
+items = loadContents(basedir)
+for i,v in ipairs(items) do
+    if v[2] ~= "system.Tombstone" then  -- I guess those are dead items?
+        local metadata = load_json(basedir .. "/" .. v[1] .. ".1password")
+        if metadata ~= nil then
+            local plaintext = decryptBase64UsingKey(metadata.encrypted, loadKey(basedir, metadata.securityLevel, password))
+            if plaintext ~= nil then
+                local secure = load_json_str(plaintext, v[1])
+            end
+        end
+    end
+end
 
 -- end of 1pass.lua ...
 
