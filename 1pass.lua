@@ -57,7 +57,12 @@ local function load_json(fname)
 end
 
 
+local keys = {}
 function loadKey(basedir, level, password)
+    if keys[level] ~= nil then
+        return keys[level]
+    end
+
     local keysjson = load_json(basedir .. "/encryptionKeys.js");
     if (keysjson == nil) or (keysjson[level] == nil) then
         return nil
@@ -81,6 +86,7 @@ function loadKey(basedir, level, password)
                 return nil
             end
 
+            keys[level] = decrypted
             return decrypted
         end
     end
@@ -109,8 +115,7 @@ showHint(basedir)
 io.write("password: ")
 local password = io.read("*l")
 
-local sl5 = loadKey(basedir, "SL5", password)
-if sl5 == nil then
+if loadKey(basedir, "SL5", password) == nil then
     print("wrong password?\n")
     os.exit(1)
 end
