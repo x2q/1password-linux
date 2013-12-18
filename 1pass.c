@@ -208,7 +208,7 @@ static int initLua(void)
     luaSetCFunc(luaState, decryptUsingPBKDF2, "decryptUsingPBKDF2");
     luaSetCFunc(luaState, decryptBase64UsingKey, "decryptBase64UsingKey");
 
-    // Transfer control to Lua to setup some APIs and state...
+    // Transfer control to Lua...
     if (luaL_dofile(luaState, "1pass.lua") != 0)
     {
         const char *msg = lua_tostring(luaState, -1);
