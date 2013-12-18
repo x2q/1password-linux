@@ -168,32 +168,6 @@ static int decryptBase64UsingKey(lua_State *L)
 } // decryptBase64UsingKey
 
 
-static void registerLuaLibs(lua_State *L)
-{
-    // We always need the string and base libraries (although base has a
-    //  few we could trim). The rest you can compile in if you want/need them.
-    int i;
-    static const luaL_Reg lualibs[] = {
-        {"_G", luaopen_base},
-        {LUA_STRLIBNAME, luaopen_string},
-        {LUA_TABLIBNAME, luaopen_table},
-        {LUA_LOADLIBNAME, luaopen_package},
-        {LUA_IOLIBNAME, luaopen_io},
-        {LUA_OSLIBNAME, luaopen_os},
-        {LUA_MATHLIBNAME, luaopen_math},
-        {LUA_DBLIBNAME, luaopen_debug},
-        {LUA_BITLIBNAME, luaopen_bit32},
-        {LUA_COLIBNAME, luaopen_coroutine},
-    };
-
-    for (i = 0; i < STATICARRAYLEN(lualibs); i++)
-    {
-        luaL_requiref(L, lualibs[i].name, lualibs[i].func, 1);
-        lua_pop(L, 1);  // remove lib
-    } // for
-} // registerLuaLibs
-
-
 static void *luaAlloc(void *ud, void *ptr, size_t osize, size_t nsize)
 {
     if (nsize == 0)
@@ -228,7 +202,7 @@ static int initLua(void)
 
     lua_atpanic(luaState, luaFatal);
     assert(lua_checkstack(luaState, 20));  // Just in case.
-    registerLuaLibs(luaState);
+    luaL_openlibs(luaState);
 
     // Set up initial C functions, etc we want to expose to Lua code...
     luaSetCFunc(luaState, decryptUsingPBKDF2, "decryptUsingPBKDF2");
