@@ -16,21 +16,8 @@ static lua_State *luaState = NULL;
 static const uint8_t zero16[16] = { 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 };
 static const char saltprefix[] = { 'S', 'a', 'l', 't', 'e', 'd', '_', '_' };
 
-
-static inline int retvalString(lua_State *L, const char *str)
-{
-    if (str != NULL)
-        lua_pushstring(L, str);
-    else
-        lua_pushnil(L);
-    return 1;
-} // retvalString
-
-
 static inline int retvalStringBytes(lua_State *L, const uint8_t *str, size_t len)
 {
-//size_t i; printf("{\n"); for (i = 0; i < len; i++) { printf(" 0x%X\n", (unsigned int) str[i]); } printf(" }\n\n");
-
     if (str != NULL)
         lua_pushlstring(L, (const char *) str, len);
     else
@@ -260,7 +247,7 @@ static int initLua(void)
 } // initLua
 
 
-void deinitLua(void)
+static void deinitLua(void)
 {
     if (luaState != NULL)
     {
@@ -270,52 +257,16 @@ void deinitLua(void)
 } // deinitLua
 
 
-
-static char *loadKey(const char *baseDir, const char *level, const char *password)
-{
-    char *retval = NULL;
-    lua_getglobal(luaState, "loadKey");
-    lua_pushstring(luaState, baseDir);
-    lua_pushstring(luaState, level);
-    lua_pushstring(luaState, password);
-    lua_call(luaState, 3, 1);
-    const char *str = lua_tostring(luaState, -1);
-    if (str)
-        retval = strdup(str);
-    lua_pop(luaState, 1);
-    return retval;
-} // luafunc_loadKey
-
-
-static char *sl5 = NULL;
-
 int main(int argc, char **argv)
 {
-    const char *basedir = "1Password/1Password.agilekeychain/data/default";  // !!! FIXME
+    atexit(deinitLua);
 
-    char *password = NULL;
-    size_t pwlen = 0;
-    printf("password: "); fflush(stdout);
-    const ssize_t rc = getline(&password, &pwlen, stdin);
-    if (rc == -1)
-        return 1;
-    else if (password[rc-1] == '\n')
-        password[rc-1] = 0;
-
-    if (!initLua())
+    if (!initLua())  // this will move control to 1pass.lua
     {
         fprintf(stderr, "uhoh\n");
         return 1;
     } // if
 
-    sl5 = loadKey(basedir, "SL5", password);
-    if (!sl5)
-    {
-        fprintf(stderr, "wrong password?\n");
-        return 1;
-    } // if
-
-    free(sl5);
     return 0;
 } // main
 

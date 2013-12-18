@@ -88,7 +88,7 @@ function loadKey(basedir, level, password)
     return nil
 end
 
-function showHint(basedir)
+local function showHint(basedir)
     local f = io.open(basedir .. "/.password.hint", "r")
     if (f == nil) then
         return
@@ -99,6 +99,23 @@ function showHint(basedir)
 
     print("(hint is '" .. str .. "').")
 end
+
+
+-- Mainline!
+
+local basedir = "1Password/1Password.agilekeychain/data/default"  -- !!! FIXME
+
+showHint(basedir)
+io.write("password: ")
+local password = io.read("*l")
+
+local sl5 = loadKey(basedir, "SL5", password)
+if sl5 == nil then
+    print("wrong password?\n")
+    os.exit(1)
+end
+
+
 
 -- end of 1pass.lua ...
 
