@@ -236,10 +236,7 @@ int main(int argc, char **argv)
     atexit(deinitLua);
 
     if (!initLua())  // this will move control to 1pass.lua
-    {
-        fprintf(stderr, "uhoh\n");
         return 1;
-    } // if
 
     return 0;
 } // main
