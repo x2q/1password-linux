@@ -168,6 +168,7 @@ static int decryptBase64UsingKey(lua_State *L)
 } // decryptBase64UsingKey
 
 
+
 static void *luaAlloc(void *ud, void *ptr, size_t osize, size_t nsize)
 {
     if (nsize == 0)
@@ -195,7 +196,7 @@ static int luaFatal(lua_State *L)
 } // luaFatal
 
 
-static int initLua(void)
+static int initLua(const int argc, char **argv)
 {
     assert(luaState == NULL);
     luaState = lua_newstate(luaAlloc, NULL);
@@ -207,6 +208,17 @@ static int initLua(void)
     // Set up initial C functions, etc we want to expose to Lua code...
     luaSetCFunc(luaState, decryptUsingPBKDF2, "decryptUsingPBKDF2");
     luaSetCFunc(luaState, decryptBase64UsingKey, "decryptBase64UsingKey");
+
+    // Set up argv table...
+    lua_newtable(luaState);
+    int i;
+    for (i = 0; i < argc; i++)
+    {
+        lua_pushinteger(luaState, i+1);
+        lua_pushstring(luaState, argv[i]);
+        lua_settable(luaState, -3);
+    } // for
+    lua_setglobal(luaState, "argv");
 
     // Transfer control to Lua...
     if (luaL_dofile(luaState, "1pass.lua") != 0)
@@ -235,7 +247,7 @@ int main(int argc, char **argv)
 {
     atexit(deinitLua);
 
-    if (!initLua())  // this will move control to 1pass.lua
+    if (!initLua(argc, argv))  // this will move control to 1pass.lua
         return 1;
 
     return 0;

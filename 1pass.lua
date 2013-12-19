@@ -118,11 +118,18 @@ end
 
 -- Mainline!
 
+--for i,v in ipairs(argv) do
+--    print("argv[" .. i .. "] = " .. v)
+--end
+
 local basedir = "1Password/1Password.agilekeychain/data/default"  -- !!! FIXME
 
-showHint(basedir)
-io.write("password: ")
-local password = io.read("*l")
+local password = argv[3]
+if password == nil then
+    showHint(basedir)
+    io.write("password: ")
+    password = io.read("*l")
+end
 
 if loadKey(basedir, "SL5", password) == nil then
     print("wrong password?\n")
