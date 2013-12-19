@@ -44,7 +44,7 @@ end
 
 local function load_json_str(str, desc)
     local retval = JSON:decode(str)
-    dumptable("JSON " .. desc, retval)
+    --dumptable("JSON " .. desc, retval)
     return retval
 end
 
@@ -115,6 +115,19 @@ function loadContents(basedir)
     return load_json(basedir .. "/contents.js");
 end
 
+local function shouldFilterOut(filter, type, name, url)
+    if filter == nil then
+        return false   -- no filter? Don't filter.
+    elseif type == "system.Tombstone" then
+        return true    -- I guess those are dead items?
+    elseif string.find(string.lower(name), filter) ~= nil then
+        return false   -- matched keep-filter on name
+    elseif string.find(string.lower(url), filter) ~= nil then
+        return false   -- matched keep-filter on URL
+    end
+    return true  -- didn't match our keep-filter. Chuck it.
+end
+
 
 -- Mainline!
 
@@ -136,15 +149,41 @@ if loadKey(basedir, "SL5", password) == nil then
     os.exit(1)
 end
 
+local filter = argv[2]
+if filter ~= nil then
+    filter = string.lower(filter)
+end
+
 items = loadContents(basedir)
 for i,v in ipairs(items) do
-    if v[2] ~= "system.Tombstone" then  -- I guess those are dead items?
+    local type = v[2]
+    local name = v[3]
+    local url = v[4]
+    if not shouldFilterOut(filter, type, name, url) then
         local metadata = load_json(basedir .. "/" .. v[1] .. ".1password")
         if metadata ~= nil then
             local plaintext = decryptBase64UsingKey(metadata.encrypted, loadKey(basedir, metadata.securityLevel, password))
+            local username = nil
+            local password = nil
             if plaintext ~= nil then
                 local secure = load_json_str(plaintext, v[1])
+                if type == "webforms.WebForm" then
+                    for ii,vv in ipairs(secure.fields) do
+                        if vv.type == "P" then
+                            password = vv.value
+                        elseif vv.type == "E" then
+                            username = vv.value
+                        end
+                    end
+                elseif type == "passwords.Password" then
+                    password = secure.password
+                end
             end
+
+            print("item: " .. metadata.title)
+            if username ~= nil then print("username: " .. username) end
+            if password ~= nil then print("password: " .. password) end
+
         end
     end
 end
