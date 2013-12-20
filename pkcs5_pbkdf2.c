@@ -22,7 +22,7 @@
 #include <string.h>
 #include <limits.h>
 #include <stdlib.h>
-#include <util.h>
+//#include <util.h>
 
 #include "sha1.h"
 

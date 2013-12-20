@@ -110,8 +110,9 @@ add_executable(1pass
 )
 
 if(LINUX)
-    set_target_properties(odin PROPERTIES LINK_FLAGS "-Wl,-rpath,$ORIGIN")
+    set_target_properties(1pass PROPERTIES LINK_FLAGS "-Wl,-rpath,$ORIGIN")
     # !!! FIXME: other stuff.
+    target_link_libraries(1pass "m")
 endif()
 
 # end of CMakeLists.txt ...
