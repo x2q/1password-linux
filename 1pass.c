@@ -9,6 +9,7 @@
 #include "aes.h"
 #include "base64.h"
 #include "md5.h"
+#include <gtk/gtk.h>
 
 #define STATICARRAYLEN(x) ( (sizeof ((x))) / (sizeof ((x)[0])) )
 
@@ -24,6 +25,15 @@ static inline int retvalStringBytes(lua_State *L, const uint8_t *str, size_t len
         lua_pushnil(L);
     return 1;
 } // retvalStringBytes
+
+static inline int retvalPointer(lua_State *L, void *ptr)
+{
+    if (ptr != NULL)
+        lua_pushlightuserdata(L, ptr);
+    else
+        lua_pushnil(L);
+    return 1;
+} // retvalPointer
 
 static inline void xorBlock(uint8_t *dst, const uint8_t *src)
 {
@@ -168,6 +178,66 @@ static int decryptBase64UsingKey(lua_State *L)
 } // decryptBase64UsingKey
 
 
+static int makeGuiMenu(lua_State *L)
+{
+    return retvalPointer(L, gtk_menu_new());
+} // makeGuiMenu
+
+
+static void clickedMenuItem(void *arg)
+{
+    // This is the callback from GTK+; now call into our actual Lua callback!
+    const int callback = (int) ((size_t)arg);
+    lua_rawgeti(luaState, LUA_REGISTRYINDEX, callback);
+    lua_call(luaState, 0, 0);
+} // clickedMenuItem
+
+
+// !!! FIXME: on destruction of a menu item, we need to luaL_unref(L, LUA_REGISTRYINDEX, callback)...
+static int appendGuiMenuItem(lua_State *L)
+{
+    const int argc = lua_gettop(L);
+    GtkWidget *menu = (GtkWidget *) lua_touserdata(L, 1);
+    const char *label = luaL_checkstring(L, 2);
+    GtkWidget *item = gtk_menu_item_new_with_label(label);
+
+    if ((argc >= 3) && (!lua_isnil(L, 3)))
+    {
+        assert(lua_isfunction(L, 3));
+        lua_pushvalue(L, 3);  // copy the Lua callback (luaL_ref() pops it).
+        const int callback = luaL_ref(L, LUA_REGISTRYINDEX);
+        gtk_signal_connect_object(GTK_OBJECT(item), "activate", GTK_SIGNAL_FUNC(clickedMenuItem), (gpointer) ((size_t)callback));
+    } // if
+
+    gtk_widget_show(item);
+    gtk_menu_append(menu, item);
+    return retvalPointer(L, item);
+} // appendGuiMenuItem
+
+
+static int setGuiMenuItemSubmenu(lua_State *L)
+{
+    GtkMenuItem *item = (GtkMenuItem *) lua_touserdata(L, 1);
+    GtkWidget *submenu = (GtkWidget *) lua_touserdata(L, 2);
+    gtk_menu_item_set_submenu(item, submenu);
+    return 0;
+} // setGuiMenuItemSubmenu
+
+
+static int popupGuiMenu(lua_State *L)
+{
+    GtkMenu *menu = (GtkMenu *) lua_touserdata(L, 1);
+    gtk_menu_popup(menu, NULL, NULL, NULL, NULL, 0, gtk_get_current_event_time());
+    return 0;
+} // popupGuiMenu
+
+
+static int giveControlToGui(lua_State *L)
+{
+    gtk_main();
+    return 0;
+} // giveControlToGui
+
 
 static void *luaAlloc(void *ud, void *ptr, size_t osize, size_t nsize)
 {
@@ -196,8 +266,20 @@ static int luaFatal(lua_State *L)
 } // luaFatal
 
 
+static void deinitLua(void)
+{
+    if (luaState != NULL)
+    {
+        lua_close(luaState);
+        luaState = NULL;
+    } // if
+} // deinitLua
+
+
 static int initLua(const int argc, char **argv)
 {
+    atexit(deinitLua);
+
     assert(luaState == NULL);
     luaState = lua_newstate(luaAlloc, NULL);
 
@@ -208,6 +290,11 @@ static int initLua(const int argc, char **argv)
     // Set up initial C functions, etc we want to expose to Lua code...
     luaSetCFunc(luaState, decryptUsingPBKDF2, "decryptUsingPBKDF2");
     luaSetCFunc(luaState, decryptBase64UsingKey, "decryptBase64UsingKey");
+    luaSetCFunc(luaState, makeGuiMenu, "makeGuiMenu");
+    luaSetCFunc(luaState, appendGuiMenuItem, "appendGuiMenuItem");
+    luaSetCFunc(luaState, setGuiMenuItemSubmenu, "setGuiMenuItemSubmenu");
+    luaSetCFunc(luaState, popupGuiMenu, "popupGuiMenu");
+    luaSetCFunc(luaState, giveControlToGui, "giveControlToGui");
 
     // Set up argv table...
     lua_newtable(luaState);
@@ -233,19 +320,9 @@ static int initLua(const int argc, char **argv)
 } // initLua
 
 
-static void deinitLua(void)
-{
-    if (luaState != NULL)
-    {
-        lua_close(luaState);
-        luaState = NULL;
-    } // if
-} // deinitLua
-
-
 int main(int argc, char **argv)
 {
-    atexit(deinitLua);
+    gtk_init(&argc, &argv);
 
     if (!initLua(argc, argv))  // this will move control to 1pass.lua
         return 1;

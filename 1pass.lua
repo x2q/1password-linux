@@ -94,6 +94,52 @@ end
 
 local basedir = "1Password/1Password.agilekeychain/data/default"  -- !!! FIXME
 
+local passwordTypeNameMap = {
+    ["wallet.financial.BankAccountUS"] = "Bank accounts",
+    ["wallet.financial.CreditCard"] = "Credit cards",
+    ["webforms.WebForm"] = "Logins",
+    ["system.Tombstone"] = "Dead items",
+    ["wallet.membership.Membership"] = "Memberships",
+    ["wallet.government.DriversLicense"] = "Drivers licenses",
+    ["passwords.Password"] = "Passwords",
+    -- !!! FIXME: more!
+}
+
+local contents = loadContents(basedir)
+local items = {}
+for i,v in ipairs(contents) do
+    local t = v[2]
+    if t ~= "system.Tombstone" then
+        if items[t] == nil then
+            items[t] = {}
+        end
+        local bucket = items[t]
+        bucket[#bucket+1] = { uuid=v[1], type=t, name=v[3], url=v[4] }  -- !!! FIXME: there are more fields, don't know what they mean yet.
+    end
+end
+contents = nil
+
+local topmenu = makeGuiMenu()
+for type,bucket in pairs(items) do
+print(type)
+    local realname = passwordTypeNameMap[type]
+    if realname == nil then
+        realname = type
+    end
+    local menuitem = appendGuiMenuItem(topmenu, realname)
+    local submenu = makeGuiMenu()
+    for i,v in pairs(bucket) do
+        local submenuitem = appendGuiMenuItem(submenu, v.name, function() print("Clicked on " .. v.name .. ", uuid is '" .. v.uuid .. "'") end)
+    end
+    setGuiMenuItemSubmenu(menuitem, submenu)
+end
+
+popupGuiMenu(topmenu)
+giveControlToGui()
+
+os.exit(1)
+
+
 local password = argv[3]
 if password == nil then
     showHint(basedir)
