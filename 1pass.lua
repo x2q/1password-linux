@@ -1,4 +1,27 @@
 JSON = (loadfile "JSON.lua")()
+dofile("dumptable.lua")
+
+local passwordTypeNameMap = {
+    ["webforms.WebForm"] = "Logins",
+    ["wallet.financial.CreditCard"] = "Credit cards",
+    ["passwords.Password"] = "Passwords",
+    ["wallet.financial.BankAccountUS"] = "Bank accounts",
+    ["wallet.membership.Membership"] = "Memberships",
+    ["wallet.government.DriversLicense"] = "Drivers licenses",
+    ["system.Tombstone"] = "Dead items",
+    -- !!! FIXME: more!
+}
+
+local passwordTypeOrdering = {
+    "webforms.WebForm",
+    "wallet.financial.CreditCard",
+    "passwords.Password",
+    "wallet.financial.BankAccountUS",
+    "wallet.membership.Membership",
+    "wallet.government.DriversLicense",
+    -- never show "system.Tombstone",
+    -- !!! FIXME: more!
+}
 
 local function load_json_str(str, desc)
     local retval = JSON:decode(str)
@@ -24,7 +47,7 @@ function loadKey(basedir, level, password)
         return keys[level]
     end
 
-    local keysjson = load_json(basedir .. "/encryptionKeys.js");
+    local keysjson = load_json(basedir .. "/encryptionKeys.js")
     if (keysjson == nil) or (keysjson[level] == nil) then
         return nil
     end
@@ -55,34 +78,164 @@ function loadKey(basedir, level, password)
     return nil
 end
 
-local function showHint(basedir)
+local function getHint(basedir)
     local f = io.open(basedir .. "/.password.hint", "r")
     if (f == nil) then
         return
     end
 
-    local str = f:read("*all")
+    local str = "(hint is '" .. f:read("*all") .. "')."
     f:close()
-
-    print("(hint is '" .. str .. "').")
+    --print(str)
+    return str
 end
 
 
 function loadContents(basedir)
-    return load_json(basedir .. "/contents.js");
+    return load_json(basedir .. "/contents.js")
 end
 
-local function shouldFilterOut(filter, type, name, url)
-    if filter == nil then
-        return false   -- no filter? Don't filter.
-    elseif type == "system.Tombstone" then
-        return true    -- I guess those are dead items?
-    elseif string.find(string.lower(name), filter) ~= nil then
-        return false   -- matched keep-filter on name
-    elseif string.find(string.lower(url), filter) ~= nil then
-        return false   -- matched keep-filter on URL
+local function build_secret_menuitem(menu, type, str, hidden)
+    if str == nil then
+        return nil
     end
-    return true  -- didn't match our keep-filter. Chuck it.
+
+    local valuestr = str
+    if hidden == true then
+        valuestr = "*****"
+    end
+    local text = type .. " " .. valuestr
+
+    local callback = function()
+        copyToClipboard(str)
+        --print("Copied data [" .. str .. "] to clipboard.")
+    end
+    return appendGuiMenuItem(menu, text, callback)
+end
+
+
+local secret_menuitem_builders = {}
+
+local function build_secret_menuitem_webform(menu, info, secure)
+    local addthis = false
+    local username = nil
+    local password = nil
+    local email = nil
+    for i,v in ipairs(secure.fields) do
+        --print(info.name .. ": " .. v.type .. ", " .. v.value)
+        local ignored = false
+        if (v.type == "P") and (password == nil) and (v.value ~= "") then
+            password = v.value
+        elseif (v.type == "T") and (usenname == nil) and (v.value ~= "") then
+            username = v.value
+        elseif (v.type == "E") and (email == nil) and (v.value ~= "") then
+            email = v.value
+        else
+            ignored = true
+        end
+
+        if not ignored then
+            addthis = true
+        end
+    end
+
+    if addthis then
+        if (username ~= nil) and (email ~= nil) and (email == username) then
+            email = nil
+        end
+
+        build_secret_menuitem(menu, "username", username)
+        build_secret_menuitem(menu, "email", email)
+        build_secret_menuitem(menu, "password", password, true)
+    end
+end
+secret_menuitem_builders["webforms.WebForm"] = build_secret_menuitem_webform
+
+
+local function build_secret_menuitem_password(menu, info, secure)
+    build_secret_menuitem(menu, "password", secure.password, true)
+end
+secret_menuitem_builders["passwords.Password"] = build_secret_menuitem_password
+
+
+local function build_secret_menuitem_bankacctus(menu, info, secure)
+    -- !!! FIXME: there's more data than this in a generic dictionary.
+    build_secret_menuitem(menu, "Account type", secure.accountType)
+    build_secret_menuitem(menu, "Routing number", secure.routingNo)
+    build_secret_menuitem(menu, "Account number", secure.accountNo)
+    build_secret_menuitem(menu, "Bank name", secure.bankName)
+    build_secret_menuitem(menu, "Owner", secure.owner)
+end
+secret_menuitem_builders["wallet.financial.BankAccountUS"] = build_secret_menuitem_bankacctus
+
+
+local function build_secret_menuitem_driverslic(menu, info, secure)
+    -- !!! FIXME: there's more data than this in a generic dictionary.
+    local birthdate = secure.birthdate_yy .. "/" .. string.sub("00" .. secure.birthdate_mm, -2) .. "/" .. string.sub("00" .. secure.birthdate_dd, -2)
+    local expiredate = secure.expiry_date_yy .. "/" .. string.sub("00" .. secure.expiry_date_mm, -2)
+    build_secret_menuitem(menu, "License number", secure.number)
+    build_secret_menuitem(menu, "Class", secure.class)
+    build_secret_menuitem(menu, "Expires", expiredate)
+    build_secret_menuitem(menu, "State", secure.state)
+    build_secret_menuitem(menu, "Country", secure.country)
+    build_secret_menuitem(menu, "Conditions", secure.conditions)
+    build_secret_menuitem(menu, "Full name", secure.fullname)
+    build_secret_menuitem(menu, "Address", secure.address)
+    build_secret_menuitem(menu, "Gender", secure.sex)
+    build_secret_menuitem(menu, "Birthdate", birthdate)
+    build_secret_menuitem(menu, "Height", secure.height)
+end
+secret_menuitem_builders["wallet.government.DriversLicense"] = build_secret_menuitem_driverslic
+
+
+local function build_secret_menuitem_membership(menu, info, secure)
+    -- !!! FIXME: there's more data than this in a generic dictionary.
+    build_secret_menuitem(menu, "Membership number", secure.membership_no)
+end
+secret_menuitem_builders["wallet.membership.Membership"] = build_secret_menuitem_membership
+
+
+local function build_secret_menuitem_creditcard(menu, info, secure)
+    -- !!! FIXME: there's more data than this in a generic dictionary.
+    local expiredate = secure.expiry_yy .. "/" .. string.sub("00" .. secure.expiry_mm, -2)
+    build_secret_menuitem(menu, "Type", secure.type)
+    build_secret_menuitem(menu, "CC number", secure.ccnum, true)
+    build_secret_menuitem(menu, "CVV", secure.cvv, true)
+    build_secret_menuitem(menu, "Expires", secure.expirydate)
+    build_secret_menuitem(menu, "Card holder", secure.cardholder)
+    build_secret_menuitem(menu, "Bank", secure.bank)
+end
+secret_menuitem_builders["wallet.financial.CreditCard"] = build_secret_menuitem_creditcard
+
+
+local function build_secret_menuitems(basedir, info, menu, password)
+    local metadata = load_json(basedir .. "/" .. info.uuid .. ".1password")
+    if metadata == nil then
+        return
+    end
+
+    local plaintext = decryptBase64UsingKey(metadata.encrypted, loadKey(basedir, metadata.securityLevel, password))
+    if plaintext == nil then
+        return
+    end
+
+    local secure = load_json_str(plaintext, info.uuid)
+    if secure == nil then
+        return
+    end
+    --dumptable("secure " .. info.name, secure)
+
+    local menuitem = appendGuiMenuItem(menu, info.name)
+
+    if secret_menuitem_builders[info.type] == nil then
+        print("WARNING: don't know how to handle items of type " .. info.type)
+        dumptable("secure " .. info.type .. " (" .. info.name .. ")", secure)
+        return
+    end
+
+    local submenu = makeGuiMenu()
+    secret_menuitem_builders[info.type](submenu, info, secure)
+    setGuiMenuItemSubmenu(menuitem, submenu)
 end
 
 
@@ -94,102 +247,52 @@ end
 
 local basedir = "1Password/1Password.agilekeychain/data/default"  -- !!! FIXME
 
-local passwordTypeNameMap = {
-    ["wallet.financial.BankAccountUS"] = "Bank accounts",
-    ["wallet.financial.CreditCard"] = "Credit cards",
-    ["webforms.WebForm"] = "Logins",
-    ["system.Tombstone"] = "Dead items",
-    ["wallet.membership.Membership"] = "Memberships",
-    ["wallet.government.DriversLicense"] = "Drivers licenses",
-    ["passwords.Password"] = "Passwords",
-    -- !!! FIXME: more!
-}
+local password = argv[2]
+while password == nil do
+    password = runGuiPasswordPrompt(getHint(basedir))
+    if password == nil then
+        os.exit(1)
+    end
+    if loadKey(basedir, "SL5", password) == nil then
+        password = nil  -- wrong password
+        local start = os.time()  -- cook the CPU for three seconds.
+        local now = start
+        while os.difftime(now, start) < 3 do
+            now = os.time()
+        end
+    end
+end
 
 local contents = loadContents(basedir)
 local items = {}
 for i,v in ipairs(contents) do
     local t = v[2]
-    if t ~= "system.Tombstone" then
-        if items[t] == nil then
-            items[t] = {}
-        end
-        local bucket = items[t]
-        bucket[#bucket+1] = { uuid=v[1], type=t, name=v[3], url=v[4] }  -- !!! FIXME: there are more fields, don't know what they mean yet.
+    if items[t] == nil then
+        items[t] = {}
     end
+    local bucket = items[t]
+    bucket[#bucket+1] = { uuid=v[1], type=t, name=v[3], url=v[4] }  -- !!! FIXME: there are more fields, don't know what they mean yet.
 end
 contents = nil
 
 local topmenu = makeGuiMenu()
-for type,bucket in pairs(items) do
-print(type)
+for orderi,type in ipairs(passwordTypeOrdering) do
+    local bucket = items[type]
     local realname = passwordTypeNameMap[type]
     if realname == nil then
         realname = type
     end
     local menuitem = appendGuiMenuItem(topmenu, realname)
     local submenu = makeGuiMenu()
+    table.sort(bucket, function(a, b) return a.name < b.name end)
     for i,v in pairs(bucket) do
-        local submenuitem = appendGuiMenuItem(submenu, v.name, function() print("Clicked on " .. v.name .. ", uuid is '" .. v.uuid .. "'") end)
+        build_secret_menuitems(basedir, v, submenu, password)
     end
     setGuiMenuItemSubmenu(menuitem, submenu)
 end
 
 popupGuiMenu(topmenu)
 giveControlToGui()
-
-os.exit(1)
-
-
-local password = argv[3]
-if password == nil then
-    showHint(basedir)
-    io.write("password: ")
-    password = io.read("*l")
-end
-
-if loadKey(basedir, "SL5", password) == nil then
-    print("wrong password?\n")
-    os.exit(1)
-end
-
-local filter = argv[2]
-if filter ~= nil then
-    filter = string.lower(filter)
-end
-
-items = loadContents(basedir)
-for i,v in ipairs(items) do
-    local type = v[2]
-    local name = v[3]
-    local url = v[4]
-    if not shouldFilterOut(filter, type, name, url) then
-        local metadata = load_json(basedir .. "/" .. v[1] .. ".1password")
-        if metadata ~= nil then
-            local plaintext = decryptBase64UsingKey(metadata.encrypted, loadKey(basedir, metadata.securityLevel, password))
-            local username = nil
-            local password = nil
-            if plaintext ~= nil then
-                local secure = load_json_str(plaintext, v[1])
-                if type == "webforms.WebForm" then
-                    for ii,vv in ipairs(secure.fields) do
-                        if vv.type == "P" then
-                            password = vv.value
-                        elseif vv.type == "E" then
-                            username = vv.value
-                        end
-                    end
-                elseif type == "passwords.Password" then
-                    password = secure.password
-                end
-            end
-
-            print("item: " .. metadata.title)
-            if username ~= nil then print("username: " .. username) end
-            if password ~= nil then print("password: " .. password) end
-
-        end
-    end
-end
 
 -- end of 1pass.lua ...
 

@@ -26,6 +26,11 @@ static inline int retvalStringBytes(lua_State *L, const uint8_t *str, size_t len
     return 1;
 } // retvalStringBytes
 
+static inline int retvalString(lua_State *L, const char *str)
+{
+    return retvalStringBytes(L, (const uint8_t *) str, strlen(str));
+} // retvalString
+
 static inline int retvalPointer(lua_State *L, void *ptr)
 {
     if (ptr != NULL)
@@ -178,6 +183,48 @@ static int decryptBase64UsingKey(lua_State *L)
 } // decryptBase64UsingKey
 
 
+static int runGuiPasswordPrompt(lua_State *L)
+{
+    const char *hintstr = lua_tostring(L, 1);
+    GtkWidget *dialog = gtk_dialog_new_with_buttons(
+                            "Master Password", NULL, GTK_DIALOG_MODAL,
+                            GTK_STOCK_CANCEL, GTK_RESPONSE_REJECT,
+                            GTK_STOCK_OK, GTK_RESPONSE_ACCEPT,
+                            NULL);
+
+    GtkWidget *content_area = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
+
+    if (hintstr != NULL)
+    {
+        GtkWidget *label = gtk_label_new(hintstr);
+        gtk_label_set_justify(GTK_LABEL(label), GTK_JUSTIFY_CENTER);
+        gtk_container_add(GTK_CONTAINER(content_area), label);
+    } // if
+
+    GtkWidget *entry = gtk_entry_new();
+    gtk_entry_set_visibility(GTK_ENTRY(entry), FALSE);
+    gtk_entry_set_activates_default(GTK_ENTRY(entry), TRUE);
+    gtk_dialog_set_default_response(GTK_DIALOG(dialog), GTK_RESPONSE_ACCEPT);
+    gtk_container_add(GTK_CONTAINER(content_area), entry);
+
+    gtk_window_set_position(GTK_WINDOW(dialog), GTK_WIN_POS_MOUSE);
+    gtk_widget_show_all(dialog);
+    const int ok = (gtk_dialog_run(GTK_DIALOG(dialog)) == GTK_RESPONSE_ACCEPT);
+    retvalString(L, ok ? (const char *) gtk_entry_get_text(GTK_ENTRY(entry)) : NULL);
+    gtk_widget_destroy(dialog);
+
+    return 1;
+} // runGuiPasswordPrompt
+
+
+static int copyToClipboard(lua_State *L)
+{
+    const char *str = luaL_checkstring(L, 1);
+    gtk_clipboard_set_text(gtk_clipboard_get(GDK_SELECTION_PRIMARY), str, -1);
+    gtk_clipboard_set_text(gtk_clipboard_get(GDK_SELECTION_CLIPBOARD), str, -1);
+} // copyToClipboard
+
+
 static int makeGuiMenu(lua_State *L)
 {
     return retvalPointer(L, gtk_menu_new());
@@ -192,8 +239,16 @@ static void clickedMenuItem(void *arg)
     lua_call(luaState, 0, 0);
 } // clickedMenuItem
 
+#if 0  // !!! FIXME: figure out how to fire this.
+static void deletedMenuItem(void *arg)
+{
+    // Clean up the Lua function we referenced in the Registry.
+    const int callback = (int) ((size_t)arg);
+printf("unref callback %d\n", callback);
+    luaL_unref(luaState, LUA_REGISTRYINDEX, callback);
+} // deletedMenuItem
+#endif
 
-// !!! FIXME: on destruction of a menu item, we need to luaL_unref(L, LUA_REGISTRYINDEX, callback)...
 static int appendGuiMenuItem(lua_State *L)
 {
     const int argc = lua_gettop(L);
@@ -295,6 +350,8 @@ static int initLua(const int argc, char **argv)
     luaSetCFunc(luaState, setGuiMenuItemSubmenu, "setGuiMenuItemSubmenu");
     luaSetCFunc(luaState, popupGuiMenu, "popupGuiMenu");
     luaSetCFunc(luaState, giveControlToGui, "giveControlToGui");
+    luaSetCFunc(luaState, runGuiPasswordPrompt, "runGuiPasswordPrompt");
+    luaSetCFunc(luaState, copyToClipboard, "copyToClipboard");
 
     // Set up argv table...
     lua_newtable(luaState);
