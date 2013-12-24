@@ -1,6 +1,11 @@
 JSON = (loadfile "JSON.lua")()
 dofile("dumptable.lua")
 
+local basedir = "1Password/1Password.agilekeychain/data/default"  -- !!! FIXME
+local password = argv[2]
+local items = nil
+local keyhookRunning = false
+
 local passwordTypeNameMap = {
     ["webforms.WebForm"] = "Logins",
     ["wallet.financial.CreditCard"] = "Credit cards",
@@ -42,7 +47,7 @@ end
 
 
 local keys = {}
-function loadKey(basedir, level, password)
+local function loadKey(level, password)
     if keys[level] ~= nil then
         return keys[level]
     end
@@ -78,7 +83,7 @@ function loadKey(basedir, level, password)
     return nil
 end
 
-local function getHint(basedir)
+local function getHint()
     local f = io.open(basedir .. "/.password.hint", "r")
     if (f == nil) then
         return
@@ -91,7 +96,7 @@ local function getHint(basedir)
 end
 
 
-function loadContents(basedir)
+local function loadContents()
     return load_json(basedir .. "/contents.js")
 end
 
@@ -109,6 +114,7 @@ local function build_secret_menuitem(menu, type, str, hidden)
     local callback = function()
         copyToClipboard(str)
         --print("Copied data [" .. str .. "] to clipboard.")
+        keyhookRunning = false
     end
     return appendGuiMenuItem(menu, text, callback)
 end
@@ -208,13 +214,13 @@ end
 secret_menuitem_builders["wallet.financial.CreditCard"] = build_secret_menuitem_creditcard
 
 
-local function build_secret_menuitems(basedir, info, menu, password)
+local function build_secret_menuitems(info, menu)
     local metadata = load_json(basedir .. "/" .. info.uuid .. ".1password")
     if metadata == nil then
         return
     end
 
-    local plaintext = decryptBase64UsingKey(metadata.encrypted, loadKey(basedir, metadata.securityLevel, password))
+    local plaintext = decryptBase64UsingKey(metadata.encrypted, loadKey(metadata.securityLevel, password))
     if plaintext == nil then
         return
     end
@@ -238,6 +244,63 @@ local function build_secret_menuitems(basedir, info, menu, password)
     setGuiMenuItemSubmenu(menuitem, submenu)
 end
 
+local function prepItems()
+    items = {}
+    local contents = loadContents()
+    for i,v in ipairs(contents) do
+        local t = v[2]
+        if items[t] == nil then
+            items[t] = {}
+        end
+        local bucket = items[t]
+        bucket[#bucket+1] = { uuid=v[1], type=t, name=v[3], url=v[4] }  -- !!! FIXME: there are more fields, don't know what they mean yet.
+    end
+end
+
+function keyhookPressed()  -- not local! Called from C!
+    if keyhookRunning then
+        return
+    end
+
+    keyhookRunning = true
+
+    while password == nil do
+        password = runGuiPasswordPrompt(getHint())
+        if password == nil then
+            keyhookRunning = false
+            return
+        end
+        if loadKey("SL5", password) == nil then
+            password = nil  -- wrong password
+            local start = os.time()  -- cook the CPU for three seconds.
+            local now = start
+            while os.difftime(now, start) < 3 do
+                now = os.time()
+            end
+        end
+    end
+
+    prepItems()
+
+    local topmenu = makeGuiMenu()
+    for orderi,type in ipairs(passwordTypeOrdering) do
+        local bucket = items[type]
+        local realname = passwordTypeNameMap[type]
+        if realname == nil then
+            realname = type
+        end
+        local menuitem = appendGuiMenuItem(topmenu, realname)
+        local submenu = makeGuiMenu()
+        table.sort(bucket, function(a, b) return a.name < b.name end)
+        for i,v in pairs(bucket) do
+            build_secret_menuitems(v, submenu)
+        end
+        setGuiMenuItemSubmenu(menuitem, submenu)
+    end
+
+    popupGuiMenu(topmenu)
+end
+
 
 -- Mainline!
 
@@ -245,53 +308,9 @@ end
 --    print("argv[" .. i .. "] = " .. v)
 --end
 
-local basedir = "1Password/1Password.agilekeychain/data/default"  -- !!! FIXME
-
-local password = argv[2]
-while password == nil do
-    password = runGuiPasswordPrompt(getHint(basedir))
-    if password == nil then
-        os.exit(1)
-    end
-    if loadKey(basedir, "SL5", password) == nil then
-        password = nil  -- wrong password
-        local start = os.time()  -- cook the CPU for three seconds.
-        local now = start
-        while os.difftime(now, start) < 3 do
-            now = os.time()
-        end
-    end
-end
-
-local contents = loadContents(basedir)
-local items = {}
-for i,v in ipairs(contents) do
-    local t = v[2]
-    if items[t] == nil then
-        items[t] = {}
-    end
-    local bucket = items[t]
-    bucket[#bucket+1] = { uuid=v[1], type=t, name=v[3], url=v[4] }  -- !!! FIXME: there are more fields, don't know what they mean yet.
-end
-contents = nil
-
-local topmenu = makeGuiMenu()
-for orderi,type in ipairs(passwordTypeOrdering) do
-    local bucket = items[type]
-    local realname = passwordTypeNameMap[type]
-    if realname == nil then
-        realname = type
-    end
-    local menuitem = appendGuiMenuItem(topmenu, realname)
-    local submenu = makeGuiMenu()
-    table.sort(bucket, function(a, b) return a.name < b.name end)
-    for i,v in pairs(bucket) do
-        build_secret_menuitems(basedir, v, submenu, password)
-    end
-    setGuiMenuItemSubmenu(menuitem, submenu)
-end
-
-popupGuiMenu(topmenu)
+-- !!! FIXME: message box, exit if basedir is wack.
+-- !!! FIXME: this can probably happen in C now (the Lua mainline is basically gone now).
+--print("Now waiting for keyhook.")
 giveControlToGui()
 
 -- end of 1pass.lua ...

@@ -75,6 +75,7 @@ include_directories("lua")
 
 add_executable(1pass
     1pass.c
+    keyhook.c
     pkcs5_pbkdf2.c
     aes.c
     md5.c
@@ -121,6 +122,7 @@ target_link_libraries(1pass ${PKG_GTKPLUS2_LIBRARIES})
 if(LINUX)
     set_target_properties(1pass PROPERTIES LINK_FLAGS "-Wl,-rpath,$ORIGIN")
     target_link_libraries(1pass "m")
+    target_link_libraries(1pass "Xtst")
 endif()
 
 # end of CMakeLists.txt ...

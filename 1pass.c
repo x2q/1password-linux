@@ -9,6 +9,7 @@
 #include "aes.h"
 #include "base64.h"
 #include "md5.h"
+#include "keyhook.h"
 #include <gtk/gtk.h>
 
 #define STATICARRAYLEN(x) ( (sizeof ((x))) / (sizeof ((x)[0])) )
@@ -287,8 +288,29 @@ static int popupGuiMenu(lua_State *L)
 } // popupGuiMenu
 
 
+static void keyhookPressed(void)
+{
+    lua_getglobal(luaState, "keyhookPressed");
+    lua_call(luaState, 0, 0);
+} // keyhookPressed
+
+
+static gboolean keyhookPumper(void *arg)
+{
+    if (pumpKeyHook())
+        keyhookPressed();
+    return TRUE;  // keep firing timer
+} // keyhookPumper
+
+
 static int giveControlToGui(lua_State *L)
 {
+    if (initKeyHook())
+    {
+        atexit(deinitKeyHook);
+        g_timeout_add(200, (GSourceFunc) keyhookPumper, (gpointer) NULL);
+    } // if
+
     gtk_main();
     return 0;
 } // giveControlToGui
