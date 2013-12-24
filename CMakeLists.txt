@@ -1,6 +1,12 @@
 cmake_minimum_required(VERSION 2.8.10)
 project(1pass)
 
+include(FindPkgConfig)
+pkg_check_modules(PKG_GTKPLUS2 gtk+-2.0)
+if(NOT PKG_GTKPLUS2_FOUND)
+    MESSAGE(FATAL_ERROR "Couldn't find GTK+ libs.")
+endif()
+
 # Set up some sanity stuff...
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     SET(LINUX TRUE)
@@ -48,6 +54,7 @@ if(LINUX OR MACOSX)
     if(DEBUG)
         add_definitions(-O0 -ggdb3)
     endif(DEBUG)
+    add_definitions(-pthread)
     add_definitions(-pipe -fsigned-char)
     set(CMAKE_CXX_FLAGS "-std=c++11 ${CMAKE_CXX_FLAGS}" CACHE STRING "compile flags" FORCE)
 
@@ -63,7 +70,6 @@ if(ONEPASS_IS_BIGENDIAN)
 else()
     add_definitions(-DPLATFORM_LITTLEENDIAN=1)
 endif()
-
 
 include_directories("lua")
 
@@ -109,9 +115,11 @@ add_executable(1pass
     lua/loadlib.c
 )
 
+include_directories(${PKG_GTKPLUS2_INCLUDE_DIRS})
+target_link_libraries(1pass ${PKG_GTKPLUS2_LIBRARIES})
+
 if(LINUX)
     set_target_properties(1pass PROPERTIES LINK_FLAGS "-Wl,-rpath,$ORIGIN")
-    # !!! FIXME: other stuff.
     target_link_libraries(1pass "m")
 endif()
 
