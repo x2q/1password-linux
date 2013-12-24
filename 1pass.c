@@ -28,7 +28,7 @@ static inline int retvalStringBytes(lua_State *L, const uint8_t *str, size_t len
 
 static inline int retvalString(lua_State *L, const char *str)
 {
-    return retvalStringBytes(L, (const uint8_t *) str, strlen(str));
+    return retvalStringBytes(L, (const uint8_t *) str, str ? strlen(str) : 0);
 } // retvalString
 
 static inline int retvalPointer(lua_State *L, void *ptr)
