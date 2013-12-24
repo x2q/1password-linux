@@ -366,12 +366,7 @@ static int initLua(const int argc, char **argv)
 
     // Transfer control to Lua...
     if (luaL_dofile(luaState, "1pass.lua") != 0)
-    {
-        const char *msg = lua_tostring(luaState, -1);
-        fprintf(stderr, "1pass.lua didn't run: %s\n", msg);
-        lua_pop(luaState, 1);
-        return 0;
-    } // if
+        luaFatal(luaState);
 
     return 1;
 } // initLua
