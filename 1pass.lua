@@ -257,12 +257,24 @@ local function prepItems()
     end
 end
 
+local passwordUnlockTime = nil
+
 function keyhookPressed()  -- not local! Called from C!
     if keyhookRunning then
         return
     end
 
     keyhookRunning = true
+
+    if passwordUnlockTime ~= nil then
+        local now = os.time()
+        local maxTime = (15 * 60)  -- !!! FIXME: don't hardcode.
+        if os.difftime(now, passwordUnlockTime) > maxTime then
+            -- lose the existing password and key, prompt user again.
+            password = argv[2]  -- might be nil, don't reset if on command line.
+            keys["SL5"] = nil
+        end
+    end
 
     while password == nil do
         password = runGuiPasswordPrompt(getHint())
@@ -277,12 +289,23 @@ function keyhookPressed()  -- not local! Called from C!
             while os.difftime(now, start) < 3 do
                 now = os.time()
             end
+        else
+            passwordUnlockTime = os.time()
         end
     end
 
     prepItems()
 
     local topmenu = makeGuiMenu()
+
+    local lock_callback = function()
+        password = argv[2]  -- might be nil, don't reset if on command line.
+        keys["SL5"] = nil
+        passwordUnlockTime = nil
+        keyhookRunning = false
+    end
+    appendGuiMenuItem(topmenu, "Lock keychain", lock_callback)
+
     for orderi,type in ipairs(passwordTypeOrdering) do
         local bucket = items[type]
         local realname = passwordTypeNameMap[type]
