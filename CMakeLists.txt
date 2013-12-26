@@ -123,6 +123,7 @@ if(LINUX)
     set_target_properties(1pass PROPERTIES LINK_FLAGS "-Wl,-rpath,$ORIGIN")
     target_link_libraries(1pass "m")
     target_link_libraries(1pass "Xtst")
+    target_link_libraries(1pass "X11")
 endif()
 
 # end of CMakeLists.txt ...
